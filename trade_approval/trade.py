@@ -1,4 +1,4 @@
-import copy
+import dataclasses
 from datetime import datetime, timezone
 from typing import Any
 
@@ -232,29 +232,13 @@ class Trade:
         Returns ``{field_name: (value_at_v1, value_at_v2)}`` for every field
         whose value changed between *version1* and *version2*.
         """
-        d1 = self.get_details_at_version(version1).to_dict()
-        d2 = self.get_details_at_version(version2).to_dict()
-        return {k: (d1[k], d2[k]) for k in d1 if d1[k] != d2[k]}
-
-    def format_history_table(self) -> str:
-        """Return a human-readable table of the action history."""
-        col = (6, 16, 10, 22, 22, 32)
-        header = (
-            f"{'Step':<{col[0]}} {'Action':<{col[1]}} {'User':<{col[2]}} "
-            f"{'State Before':<{col[3]}} {'State After':<{col[4]}} "
-            f"{'Timestamp':<{col[5]}} Notes"
-        )
-        sep = "-" * (sum(col) + 10)
-        rows = [header, sep]
-        for h in self.history:
-            rows.append(
-                f"{h.step:<{col[0]}} {h.action.value:<{col[1]}} "
-                f"{h.user_id:<{col[2]}} {h.state_before.value:<{col[3]}} "
-                f"{h.state_after.value:<{col[4]}} "
-                f"{h.timestamp.strftime('%Y-%m-%dT%H:%M:%SZ'):<{col[5]}} "
-                f"{h.notes}"
-            )
-        return "\n".join(rows)
+        d1 = self.get_details_at_version(version1)
+        d2 = self.get_details_at_version(version2)
+        return {
+            f.name: (getattr(d1, f.name), getattr(d2, f.name))
+            for f in dataclasses.fields(TradeDetails)
+            if getattr(d1, f.name) != getattr(d2, f.name)
+        }
 
     def __repr__(self) -> str:
         return (

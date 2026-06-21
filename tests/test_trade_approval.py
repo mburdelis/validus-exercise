@@ -12,6 +12,7 @@ from trade_approval import (
     TradeStore,
     TradeValidationError,
     UnauthorizedActionError,
+    format_history_table,
 )
 
 
@@ -168,7 +169,7 @@ class TestScenario4HistoryAndDiff:
         assert book_entry.trade_details_snapshot.strike == 1.09
 
     def test_format_history_table_returns_string(self, store, approved_trade):
-        table = store.format_history_table(approved_trade.trade_id)
+        table = format_history_table(store.get_trade(approved_trade.trade_id))
         assert "Submit" in table
         assert "Approve" in table
         assert "User1" in table

@@ -17,11 +17,12 @@ pip install pytest   # only needed to run the test suite
 
 ```
 trade_approval/
-├── exceptions.py   # Domain exceptions
-├── models.py       # TradeDetails, TradeState, TradeAction, Direction, HistoryEntry
-├── validation.py   # Field-level validation rules
-├── trade.py        # Trade – the state machine
-└── store.py        # TradeStore – in-memory registry and public API
+├── exceptions.py     # Domain exceptions
+├── models.py         # TradeDetails, TradeState, TradeAction, Direction, HistoryEntry
+├── validation.py     # Field-level validation rules
+├── trade.py          # Trade – the state machine
+├── store.py          # TradeStore – in-memory registry and public API
+└── presentation.py   # Serialisation and display formatting (presentation layer)
 
 tests/
 └── test_trade_approval.py  # 52 unit tests
@@ -98,9 +99,22 @@ The single entry-point.  All methods return the `Trade` object.
 | `get_history` | `(trade_id) → list[HistoryEntry]` | Full ordered action history. |
 | `get_details_at_version` | `(trade_id, version) → TradeDetails` | Snapshot after the *n*-th action (1-indexed). |
 | `diff` | `(trade_id, v1, v2) → dict` | Fields that changed between two versions: `{field: (old, new)}`. |
-| `format_history_table` | `(trade_id) → str` | Human-readable tabular history. |
 | `list_trades` | `(state=None) → list[Trade]` | All trades, optionally filtered by state. |
 | `get_trade` | `(trade_id) → Trade` | Fetch a trade by ID. |
+
+### `presentation` module
+
+Serialisation and display functions. Import from `trade_approval` directly:
+
+```python
+from trade_approval import format_history_table, trade_details_to_dict, history_entry_to_dict
+```
+
+| Function | Signature | Description |
+|---|---|---|
+| `format_history_table` | `(trade: Trade) → str` | Human-readable tabular history. |
+| `trade_details_to_dict` | `(details: TradeDetails) → dict` | Serialise trade details to a plain dict with string values. |
+| `history_entry_to_dict` | `(entry: HistoryEntry) → dict` | Serialise a history entry to a plain dict (suitable for JSON export). |
 
 ### `TradeDetails`
 
@@ -144,7 +158,7 @@ class HistoryEntry:
     notes: str
 ```
 
-`entry.to_dict()` serialises to a plain dict for JSON export.
+Use `history_entry_to_dict(entry)` from `trade_approval.presentation` to serialise to a plain dict for JSON export.
 
 ### Exceptions
 
@@ -213,12 +227,16 @@ store.book(trade.trade_id, "User1", strike=1.0875)
 history = store.get_history(trade.trade_id)
 # list of HistoryEntry, one per action
 
-print(store.format_history_table(trade.trade_id))
+from trade_approval import format_history_table, trade_details_to_dict
+
+print(format_history_table(store.get_trade(trade.trade_id)))
 # Step   Action  User   State Before  State After  Timestamp  Notes
 # …
 
-v1 = store.get_details_at_version(trade.trade_id, 1)  # snapshot after Submit
-diff = store.diff(trade.trade_id, 1, 2)               # changes made by Update
+v1 = store.get_details_at_version(trade.trade_id, 1)
+print(trade_details_to_dict(v1))           # plain dict, ready for JSON
+
+diff = store.diff(trade.trade_id, 1, 2)   # changes made by Update
 ```
 
 Run all scenarios:
@@ -251,6 +269,8 @@ python -m pytest tests/ -v
 **Immutable history snapshots.** Each `HistoryEntry` stores a `copy.deepcopy` of `TradeDetails` at the moment of the action, so past versions are never corrupted by subsequent updates.
 
 **Diff between any two versions.** `diff(v1, v2)` compares snapshots at arbitrary steps, not just consecutive ones.
+
+**Layered architecture.** The code is split into three distinct layers with one-way dependencies: domain (`models.py`, `validation.py`, `trade.py`) → infrastructure (`store.py`) → presentation (`presentation.py`). Domain objects have no knowledge of how they are stored or displayed. Serialisation (`trade_details_to_dict`, `history_entry_to_dict`) and formatting (`format_history_table`) live exclusively in `presentation.py`.
 
 **Storage abstraction.** `TradeStore` wraps an in-memory dict. Replacing it with a database adapter would only require changes inside `store.py`; the `Trade` state-machine logic is unaffected.
 

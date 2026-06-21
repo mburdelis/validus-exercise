@@ -81,21 +81,6 @@ class TradeDetails:
     def copy(self) -> "TradeDetails":
         return copy.deepcopy(self)
 
-    def to_dict(self) -> dict:
-        return {
-            "trading_entity": self.trading_entity,
-            "counterparty": self.counterparty,
-            "direction": self.direction.value,
-            "style": self.style,
-            "notional_currency": self.notional_currency,
-            "notional_amount": self.notional_amount,
-            "underlying": self.underlying,
-            "trade_date": str(self.trade_date),
-            "value_date": str(self.value_date),
-            "delivery_date": str(self.delivery_date),
-            "strike": self.strike,
-        }
-
 
 @dataclass
 class HistoryEntry:
@@ -110,13 +95,3 @@ class HistoryEntry:
     trade_details_snapshot: TradeDetails
     notes: str = ""
 
-    def to_dict(self) -> dict:
-        return {
-            "step": self.step,
-            "action": self.action.value,
-            "user_id": self.user_id,
-            "state_before": self.state_before.value,
-            "state_after": self.state_after.value,
-            "timestamp": self.timestamp.isoformat(),
-            "notes": self.notes,
-        }

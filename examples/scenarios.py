@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from datetime import date
 
-from trade_approval import Direction, TradeDetails, TradeStore
+from trade_approval import Direction, TradeDetails, TradeStore, format_history_table, trade_details_to_dict
 
 
 def _details(notional_amount: float = 1_000_000.0) -> TradeDetails:
@@ -44,7 +44,7 @@ def scenario_1() -> None:
     store.submit(trade.trade_id, "User1")
     store.approve(trade.trade_id, "User2")
 
-    print(store.format_history_table(trade.trade_id))
+    print(format_history_table(store.get_trade(trade.trade_id)))
     print(f"\nFinal state : {trade.state.value}")
     print(f"Approver    : {trade.approver_id}")
 
@@ -64,7 +64,7 @@ def scenario_2() -> None:
     store.update(trade.trade_id, "User2", _details(notional_amount=1_200_000))
     store.approve(trade.trade_id, "User1")
 
-    print(store.format_history_table(trade.trade_id))
+    print(format_history_table(store.get_trade(trade.trade_id)))
 
     diff = store.diff(trade.trade_id, 1, 2)
     print(f"\nDiff (v1 → v2): {diff}")
@@ -87,7 +87,7 @@ def scenario_3() -> None:
     store.send_to_execute(trade.trade_id, "User2")
     store.book(trade.trade_id, "User1", strike=1.0875)
 
-    print(store.format_history_table(trade.trade_id))
+    print(format_history_table(store.get_trade(trade.trade_id)))
     print(f"\nFinal state : {trade.state.value}")
     print(f"Strike      : {trade.current_details.strike}")
 
@@ -110,11 +110,11 @@ def scenario_4() -> None:
     store.book(trade.trade_id, "User2", strike=1.0923)
 
     print("\n--- History table ---")
-    print(store.format_history_table(trade.trade_id))
+    print(format_history_table(store.get_trade(trade.trade_id)))
 
     print("\n--- Trade details at version 1 (after Submit) ---")
     v1 = store.get_details_at_version(trade.trade_id, 1)
-    for k, v in v1.to_dict().items():
+    for k, v in trade_details_to_dict(v1).items():
         print(f"  {k}: {v}")
 
     print("\n--- Diff between version 1 and version 2 (after Update) ---")
@@ -124,7 +124,7 @@ def scenario_4() -> None:
 
     print("\n--- Trade details at final version (after Book) ---")
     vn = store.get_details_at_version(trade.trade_id, len(store.get_history(trade.trade_id)))
-    for k, v in vn.to_dict().items():
+    for k, v in trade_details_to_dict(vn).items():
         print(f"  {k}: {v}")
 
 

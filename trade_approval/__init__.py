@@ -34,12 +34,16 @@ from .models import (
     TradeState,
     VALID_CURRENCIES,
 )
+from .presentation import format_history_table, history_entry_to_dict, trade_details_to_dict
 from .store import TradeStore
 from .trade import Trade
 
 __all__ = [
     "TradeStore",
     "Trade",
+    "format_history_table",
+    "trade_details_to_dict",
+    "history_entry_to_dict",
     "TradeDetails",
     "TradeState",
     "TradeAction",

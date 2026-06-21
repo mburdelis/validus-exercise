@@ -105,10 +105,6 @@ class TradeStore:
         """
         return self.get_trade(trade_id).diff(version1, version2)
 
-    def format_history_table(self, trade_id: str) -> str:
-        """Return a formatted table of the trade's action history."""
-        return self.get_trade(trade_id).format_history_table()
-
     def list_trades(self, state: TradeState | None = None) -> list[Trade]:
         """Return all trades, optionally filtered by *state*."""
         trades = list(self._trades.values())
