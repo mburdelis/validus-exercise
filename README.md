@@ -5,9 +5,11 @@ A Python library implementing the trade approval workflow described in the Valid
 ## Requirements
 
 - Python 3.11+
+- [pydantic](https://docs.pydantic.dev/) ≥ 2.0
 - pytest (for tests only)
 
 ```bash
+pip install pydantic
 pip install pytest   # only needed to run the test suite
 ```
 
@@ -18,8 +20,7 @@ pip install pytest   # only needed to run the test suite
 ```
 trade_approval/
 ├── exceptions.py     # Domain exceptions
-├── models.py         # TradeDetails, TradeState, TradeAction, Direction, HistoryEntry
-├── validation.py     # Field-level validation rules
+├── models.py         # TradeDetails, HistoryEntry (Pydantic models), enums
 ├── trade.py          # Trade – the state machine
 ├── store.py          # TradeStore – in-memory registry and public API
 └── presentation.py   # Serialisation and display formatting (presentation layer)
@@ -118,9 +119,10 @@ from trade_approval import format_history_table, trade_details_to_dict, history_
 
 ### `TradeDetails`
 
+A frozen [Pydantic](https://docs.pydantic.dev/) `BaseModel` — all validation runs automatically at construction time.
+
 ```python
-@dataclass
-class TradeDetails:
+class TradeDetails(BaseModel):
     trading_entity: str
     counterparty: str
     direction: Direction          # Direction.BUY / Direction.SELL (or "Buy"/"Sell")
@@ -134,7 +136,7 @@ class TradeDetails:
     strike: float | None = None   # set by Book action
 ```
 
-**Validation rules enforced on create and update:**
+**Validation rules enforced at construction (raises `pydantic.ValidationError`):**
 
 - `trading_entity` and `counterparty` must be non-empty.
 - `notional_currency` must be a valid ISO 4217 / IBAN code.
@@ -145,9 +147,10 @@ class TradeDetails:
 
 ### `HistoryEntry`
 
+A frozen Pydantic `BaseModel` — immutable once created.
+
 ```python
-@dataclass
-class HistoryEntry:
+class HistoryEntry(BaseModel):
     step: int
     action: TradeAction
     user_id: str
@@ -164,11 +167,11 @@ Use `history_entry_to_dict(entry)` from `trade_approval.presentation` to seriali
 
 | Exception | When raised |
 |---|---|
-| `TradeValidationError` | Trade details fail a validation rule. |
+| `pydantic.ValidationError` | `TradeDetails` constructed with invalid data. |
 | `InvalidStateTransitionError` | Action not permitted in the current state. |
 | `UnauthorizedActionError` | User not authorised to perform the action. |
 | `TradeNotFoundError` | `trade_id` not found in the store. |
-| `TradeWorkflowError` | Base class – catches all of the above. |
+| `TradeWorkflowError` | Base class for all workflow exceptions. |
 
 ---
 
@@ -270,7 +273,9 @@ python -m pytest tests/ -v
 
 **Diff between any two versions.** `diff(v1, v2)` compares snapshots at arbitrary steps, not just consecutive ones.
 
-**Layered architecture.** The code is split into three distinct layers with one-way dependencies: domain (`models.py`, `validation.py`, `trade.py`) → infrastructure (`store.py`) → presentation (`presentation.py`). Domain objects have no knowledge of how they are stored or displayed. Serialisation (`trade_details_to_dict`, `history_entry_to_dict`) and formatting (`format_history_table`) live exclusively in `presentation.py`.
+**Pydantic models.** `TradeDetails` and `HistoryEntry` are frozen Pydantic `BaseModel` subclasses. All field-level and cross-field validation runs automatically at construction time, so by the time a `TradeDetails` reaches the store or trade, it is guaranteed valid. `model_dump(mode="json")` in `presentation.py` gives JSON-safe serialisation with zero boilerplate.
+
+**Layered architecture.** The code is split into three distinct layers with one-way dependencies: domain (`models.py`, `trade.py`) → infrastructure (`store.py`) → presentation (`presentation.py`). Domain objects have no knowledge of how they are stored or displayed. Serialisation (`trade_details_to_dict`, `history_entry_to_dict`) and formatting (`format_history_table`) live exclusively in `presentation.py`.
 
 **Storage abstraction.** `TradeStore` wraps an in-memory dict. Replacing it with a database adapter would only require changes inside `store.py`; the `Trade` state-machine logic is unaffected.
 

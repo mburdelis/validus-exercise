@@ -1,6 +1,7 @@
 """Unit tests covering all key actions, state transitions, and validations."""
 import pytest
 from datetime import date
+from pydantic import ValidationError
 
 from trade_approval import (
     Direction,
@@ -10,7 +11,6 @@ from trade_approval import (
     TradeNotFoundError,
     TradeState,
     TradeStore,
-    TradeValidationError,
     UnauthorizedActionError,
     format_history_table,
 )
@@ -181,35 +181,37 @@ class TestScenario4HistoryAndDiff:
 # ---------------------------------------------------------------------------
 
 class TestValidation:
-    def test_invalid_notional_currency(self, store):
-        with pytest.raises(TradeValidationError, match="IBAN"):
-            store.create_trade("User1", make_details(notional_currency="ZZZ"))
+    """Validation is enforced by Pydantic at TradeDetails construction time."""
 
-    def test_notional_currency_not_in_underlying(self, store):
-        with pytest.raises(TradeValidationError, match="underlying"):
-            store.create_trade("User1", make_details(notional_currency="EUR", underlying="GBPUSD"))
+    def test_invalid_notional_currency(self):
+        with pytest.raises(ValidationError, match="IBAN"):
+            make_details(notional_currency="ZZZ")
 
-    def test_invalid_underlying_format(self, store):
-        with pytest.raises(TradeValidationError, match="(?i)underlying"):
-            store.create_trade("User1", make_details(underlying="INVALID_PAIR_XYZ"))
+    def test_notional_currency_not_in_underlying(self):
+        with pytest.raises(ValidationError, match="(?i)underlying"):
+            make_details(notional_currency="EUR", underlying="GBPUSD")
 
-    def test_underlying_with_invalid_currencies(self, store):
-        with pytest.raises(TradeValidationError):
-            store.create_trade("User1", make_details(underlying="XXXYYY"))
+    def test_invalid_underlying_format(self):
+        with pytest.raises(ValidationError, match="(?i)underlying"):
+            make_details(underlying="INVALID_PAIR_XYZ")
 
-    def test_trade_date_after_value_date(self, store):
-        with pytest.raises(TradeValidationError, match="(?i)trade date"):
-            store.create_trade("User1", make_details(
+    def test_underlying_with_invalid_currencies(self):
+        with pytest.raises(ValidationError):
+            make_details(underlying="XXXYYY")
+
+    def test_trade_date_after_value_date(self):
+        with pytest.raises(ValidationError, match="(?i)trade date"):
+            make_details(
                 trade_date=date(2025, 1, 15),
                 value_date=date(2025, 1, 10),
-            ))
+            )
 
-    def test_value_date_after_delivery_date(self, store):
-        with pytest.raises(TradeValidationError, match="(?i)value date"):
-            store.create_trade("User1", make_details(
+    def test_value_date_after_delivery_date(self):
+        with pytest.raises(ValidationError, match="(?i)value date"):
+            make_details(
                 value_date=date(2025, 1, 20),
                 delivery_date=date(2025, 1, 15),
-            ))
+            )
 
     def test_equal_dates_are_valid(self, store):
         trade = store.create_trade("User1", make_details(
@@ -219,30 +221,29 @@ class TestValidation:
         ))
         assert trade.state == TradeState.DRAFT
 
-    def test_negative_notional_amount(self, store):
-        with pytest.raises(TradeValidationError, match="positive"):
-            store.create_trade("User1", make_details(notional_amount=-500_000))
+    def test_negative_notional_amount(self):
+        with pytest.raises(ValidationError, match="positive"):
+            make_details(notional_amount=-500_000)
 
-    def test_zero_notional_amount(self, store):
-        with pytest.raises(TradeValidationError, match="positive"):
-            store.create_trade("User1", make_details(notional_amount=0))
+    def test_zero_notional_amount(self):
+        with pytest.raises(ValidationError, match="positive"):
+            make_details(notional_amount=0)
 
-    def test_empty_trading_entity(self, store):
-        with pytest.raises(TradeValidationError, match="Trading entity"):
-            store.create_trade("User1", make_details(trading_entity=""))
+    def test_empty_trading_entity(self):
+        with pytest.raises(ValidationError, match="(?i)trading entity"):
+            make_details(trading_entity="")
 
-    def test_update_also_validates_details(self, store, submitted_trade):
-        bad_details = make_details(notional_amount=-1)
-        with pytest.raises(TradeValidationError):
-            store.update(submitted_trade.trade_id, "User2", bad_details)
+    def test_invalid_details_rejected_at_construction(self):
+        with pytest.raises(ValidationError):
+            make_details(notional_amount=-1)
 
-    def test_underlying_slash_separator_accepted(self, store):
-        trade = store.create_trade("User1", make_details(underlying="EUR/USD"))
-        assert trade.current_details.underlying == "EURUSD"
+    def test_underlying_slash_separator_accepted(self):
+        details = make_details(underlying="EUR/USD")
+        assert details.underlying == "EURUSD"
 
-    def test_direction_string_accepted(self, store):
-        trade = store.create_trade("User1", make_details(direction="Buy"))
-        assert trade.current_details.direction == Direction.BUY
+    def test_direction_string_accepted(self):
+        details = make_details(direction="Buy")
+        assert details.direction == Direction.BUY
 
 
 # ---------------------------------------------------------------------------

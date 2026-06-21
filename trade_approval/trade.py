@@ -1,10 +1,8 @@
-import dataclasses
 from datetime import datetime, timezone
 from typing import Any
 
 from .exceptions import InvalidStateTransitionError, UnauthorizedActionError
 from .models import HistoryEntry, TradeAction, TradeDetails, TradeState
-from .validation import validate_trade_details
 
 # Maps (current_state, action) -> next_state.  Single source of truth for
 # permitted transitions; adding a new state/action only requires a new entry.
@@ -49,7 +47,7 @@ class Trade:
         self.requester_id: str = requester_id
         self.approver_id: str | None = None
         self.state: TradeState = TradeState.DRAFT
-        self.current_details: TradeDetails = details.copy()
+        self.current_details: TradeDetails = details.model_copy(deep=True)
         self.history: list[HistoryEntry] = []
 
     # ------------------------------------------------------------------
@@ -76,7 +74,7 @@ class Trade:
                 state_before=state_before,
                 state_after=state_after,
                 timestamp=self._now(),
-                trade_details_snapshot=self.current_details.copy(),
+                trade_details_snapshot=self.current_details.model_copy(deep=True),
                 notes=notes,
             )
         )
@@ -161,8 +159,8 @@ class Trade:
     def update(self, user_id: str, new_details: TradeDetails) -> None:
         """Update trade details (PendingApproval → NeedsReapproval).
 
-        Only a non-requester (approver) may update.  The updated details are
-        validated before the transition occurs.
+        Only a non-requester (approver) may update.  new_details is already
+        validated by Pydantic at construction time.
         """
         next_state = self._transition(TradeAction.UPDATE)
         if self._is_requester(user_id):
@@ -170,11 +168,10 @@ class Trade:
                 "The requester cannot update their own trade during approval; "
                 "an approver must make changes."
             )
-        validate_trade_details(new_details)
         if self.approver_id is None:
             self.approver_id = user_id
         state_before = self.state
-        self.current_details = new_details.copy()
+        self.current_details = new_details.model_copy(deep=True)
         self.state = next_state
         self._record(
             TradeAction.UPDATE, user_id, state_before, next_state,
@@ -200,9 +197,7 @@ class Trade:
                 "Only the requester or approver may book the trade."
             )
         state_before = self.state
-        new_details = self.current_details.copy()
-        new_details.strike = strike
-        self.current_details = new_details
+        self.current_details = self.current_details.model_copy(update={"strike": strike})
         self.state = next_state
         self._record(
             TradeAction.BOOK, user_id, state_before, next_state,
@@ -224,7 +219,7 @@ class Trade:
                 f"Version {version} is out of range "
                 f"(trade has {len(self.history)} history entries)."
             )
-        return self.history[version - 1].trade_details_snapshot.copy()
+        return self.history[version - 1].trade_details_snapshot
 
     def diff(self, version1: int, version2: int) -> dict[str, tuple[Any, Any]]:
         """Return fields that differ between two versions of trade details.
@@ -235,9 +230,9 @@ class Trade:
         d1 = self.get_details_at_version(version1)
         d2 = self.get_details_at_version(version2)
         return {
-            f.name: (getattr(d1, f.name), getattr(d2, f.name))
-            for f in dataclasses.fields(TradeDetails)
-            if getattr(d1, f.name) != getattr(d2, f.name)
+            name: (getattr(d1, name), getattr(d2, name))
+            for name in TradeDetails.model_fields
+            if getattr(d1, name) != getattr(d2, name)
         }
 
     def __repr__(self) -> str:

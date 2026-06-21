@@ -4,7 +4,6 @@ from typing import Any
 from .exceptions import TradeNotFoundError
 from .models import HistoryEntry, TradeDetails, TradeState
 from .trade import Trade
-from .validation import validate_trade_details
 
 
 class TradeStore:
@@ -25,10 +24,9 @@ class TradeStore:
     def create_trade(self, requester_id: str, details: TradeDetails) -> Trade:
         """Create a new trade in ``Draft`` state.
 
-        Validates *details* before persisting.  Returns the new ``Trade``
-        object (which carries its generated ``trade_id``).
+        *details* is a Pydantic model already validated at construction time.
+        Returns the new ``Trade`` object (which carries its generated ``trade_id``).
         """
-        validate_trade_details(details)
         trade_id = str(uuid.uuid4())
         trade = Trade(trade_id, requester_id, details)
         self._trades[trade_id] = trade

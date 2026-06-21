@@ -9,33 +9,13 @@ from .trade import Trade
 
 
 def trade_details_to_dict(details: TradeDetails) -> dict:
-    """Serialise a TradeDetails instance to a plain dict with string values."""
-    return {
-        "trading_entity": details.trading_entity,
-        "counterparty": details.counterparty,
-        "direction": details.direction.value,
-        "style": details.style,
-        "notional_currency": details.notional_currency,
-        "notional_amount": details.notional_amount,
-        "underlying": details.underlying,
-        "trade_date": str(details.trade_date),
-        "value_date": str(details.value_date),
-        "delivery_date": str(details.delivery_date),
-        "strike": details.strike,
-    }
+    """Serialise a TradeDetails instance to a plain dict with JSON-compatible values."""
+    return details.model_dump(mode="json")
 
 
 def history_entry_to_dict(entry: HistoryEntry) -> dict:
     """Serialise a HistoryEntry to a plain dict suitable for JSON export."""
-    return {
-        "step": entry.step,
-        "action": entry.action.value,
-        "user_id": entry.user_id,
-        "state_before": entry.state_before.value,
-        "state_after": entry.state_after.value,
-        "timestamp": entry.timestamp.isoformat(),
-        "notes": entry.notes,
-    }
+    return entry.model_dump(mode="json", exclude={"trade_details_snapshot"})
 
 
 def format_history_table(trade: Trade) -> str:

@@ -7,7 +7,7 @@ name = "trade-approval"
 version = "0.1.0"
 description = "Trade Approval Workflow Library – Validus Case Study"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["pydantic>=2.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.4"]
