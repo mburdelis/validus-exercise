@@ -1,0 +1,64 @@
+{
+  "trade_id": "568466b5-24d7-4a52-a532-05bfdbbe52b4",
+  "state": "Executed",
+  "current_details": {
+    "trading_entity": "Acme Corp",
+    "counterparty": "Bank XYZ",
+    "direction": "Buy",
+    "notional_currency": "EUR",
+    "notional_amount": 1200000.0,
+    "underlying": "EURUSD",
+    "trade_date": "2025-01-10",
+    "value_date": "2025-01-12",
+    "delivery_date": "2025-01-15",
+    "style": "Forward",
+    "strike": 1.0875
+  },
+  "history": [
+    {
+      "step": 1,
+      "action": "Submit",
+      "user_id": "User1",
+      "state_before": "Draft",
+      "state_after": "PendingApproval",
+      "timestamp": "2026-06-22T22:14:00.244718Z",
+      "notes": "Trade submitted for approval."
+    },
+    {
+      "step": 2,
+      "action": "Update",
+      "user_id": "User2",
+      "state_before": "PendingApproval",
+      "state_after": "NeedsReapproval",
+      "timestamp": "2026-06-22T22:14:00.244913Z",
+      "notes": "Approver updated trade details; reapproval required."
+    },
+    {
+      "step": 3,
+      "action": "Approve",
+      "user_id": "User1",
+      "state_before": "NeedsReapproval",
+      "state_after": "Approved",
+      "timestamp": "2026-06-22T22:14:00.244923Z",
+      "notes": "Requester reapproves updated trade details."
+    },
+    {
+      "step": 4,
+      "action": "SendToExecute",
+      "user_id": "User2",
+      "state_before": "Approved",
+      "state_after": "SentToCounterparty",
+      "timestamp": "2026-06-22T22:14:00.244932Z",
+      "notes": "Trade sent to counterparty."
+    },
+    {
+      "step": 5,
+      "action": "Book",
+      "user_id": "User1",
+      "state_before": "SentToCounterparty",
+      "state_after": "Executed",
+      "timestamp": "2026-06-22T22:14:00.244997Z",
+      "notes": "Trade executed and booked with strike 1.0875."
+    }
+  ]
+}

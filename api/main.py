@@ -5,7 +5,9 @@ Run with:
 
 Then open http://127.0.0.1:8000/docs for the interactive Swagger UI.
 """
-from fastapi import FastAPI
+from typing import Any
+
+from fastapi import Body, FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -52,23 +54,47 @@ async def invalid_transition_handler(request, exc):
 # Request / response models
 # ---------------------------------------------------------------------------
 
+_EXAMPLE_DETAILS = {
+    "trading_entity": "Acme Corp",
+    "counterparty": "Bank XYZ",
+    "direction": "Buy",
+    "notional_currency": "EUR",
+    "notional_amount": 1000000,
+    "underlying": "EURUSD",
+    "trade_date": "2025-01-10",
+    "value_date": "2025-01-12",
+    "delivery_date": "2025-01-15",
+    "strike": None,
+}
+
+
 class CreateTradeRequest(BaseModel):
+    model_config = {"json_schema_extra": {"example": {"requester_id": "User1", "details": _EXAMPLE_DETAILS}}}
     requester_id: str
     details: TradeDetails
 
 
 class UserRequest(BaseModel):
+    model_config = {"json_schema_extra": {"example": {"user_id": "User1"}}}
     user_id: str
 
 
 class UpdateTradeRequest(BaseModel):
+    model_config = {"json_schema_extra": {"example": {"user_id": "User2", "new_details": {**_EXAMPLE_DETAILS, "notional_amount": 1200000}}}}
     user_id: str
     new_details: TradeDetails
 
 
 class BookRequest(BaseModel):
+    model_config = {"json_schema_extra": {"example": {"user_id": "User1", "strike": 1.0875}}}
     user_id: str
     strike: float
+
+
+class PatchTradeRequest(BaseModel):
+    model_config = {"json_schema_extra": {"example": {"user_id": "User2", "fields": {"notional_amount": 1200000}}}}
+    user_id: str
+    fields: dict[str, Any]
 
 
 class TradeResponse(BaseModel):
@@ -129,7 +155,7 @@ def submit(trade_id: str, req: UserRequest):
 
 @app.post("/trades/{trade_id}/approve", response_model=TradeResponse,
           summary="Approve a trade (PendingApproval → Approved or NeedsReapproval → Approved)")
-def approve(trade_id: str, req: UserRequest):
+def approve(trade_id: str, req: UserRequest = Body(openapi_examples={"default": {"value": {"user_id": "User2"}}})):
     return _to_response(store.approve(trade_id, req.user_id))
 
 
@@ -145,9 +171,15 @@ def update(trade_id: str, req: UpdateTradeRequest):
     return _to_response(store.update(trade_id, req.user_id, req.new_details))
 
 
+@app.post("/trades/{trade_id}/patch", response_model=TradeResponse,
+          summary="Partially update trade details — only supply the fields that change")
+def patch(trade_id: str, req: PatchTradeRequest):
+    return _to_response(store.patch(trade_id, req.user_id, **req.fields))
+
+
 @app.post("/trades/{trade_id}/send-to-execute", response_model=TradeResponse,
           summary="Send an approved trade to the counterparty (Approved → SentToCounterparty)")
-def send_to_execute(trade_id: str, req: UserRequest):
+def send_to_execute(trade_id: str, req: UserRequest = Body(openapi_examples={"default": {"value": {"user_id": "User2"}}})):
     return _to_response(store.send_to_execute(trade_id, req.user_id))
 
 
@@ -161,6 +193,12 @@ def book(trade_id: str, req: BookRequest):
          summary="Get the full action history for a trade")
 def get_history(trade_id: str):
     return store.get_history(trade_id)
+
+
+@app.get("/history", response_model=dict[str, list[HistoryEntry]],
+         summary="Get action history for all trades, keyed by trade ID")
+def get_all_history():
+    return store.get_all_history()
 
 
 @app.get("/trades/{trade_id}/diff",

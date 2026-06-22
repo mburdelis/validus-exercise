@@ -105,6 +105,10 @@ class TradeStore:
         """Return the full action history for a trade."""
         return self.get_trade(trade_id).get_history()
 
+    def get_all_history(self) -> dict[str, list[HistoryEntry]]:
+        """Return action history for every trade, keyed by trade ID."""
+        return {trade_id: trade.get_history() for trade_id, trade in self._trades.items()}
+
     def get_details_at_version(self, trade_id: str, version: int) -> TradeDetails:
         """Return trade details as they were after the *version*-th action (1-indexed)."""
         return self.get_trade(trade_id).get_details_at_version(version)

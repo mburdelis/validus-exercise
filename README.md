@@ -8,11 +8,12 @@ A Python library implementing the trade approval workflow described in the Valid
 - [pydantic](https://docs.pydantic.dev/) ≥ 2.0
 - [fastapi](https://fastapi.tiangolo.com/) ≥ 0.100 + uvicorn (optional: for the REST API)
 - pytest (for tests only)
+- httpx (optional: only needed to run the FastAPI tests in `tests/test_api.py`)
 
 Set up the virtual environment and install all dependencies:
 
 ```bash
-uv venv                                                # create .venv
+uv venv                                                   # create .venv
 uv pip install --python .venv/bin/python -e ".[dev,api]"  # install everything
 ```
 
@@ -31,10 +32,15 @@ trade_approval/
 └── presentation.py   # Serialisation and display formatting (presentation layer)
 
 tests/
-└── test_trade_approval.py  # 52 unit tests
+├── test_trade_approval.py  # 64 unit tests for the core library
+└── test_api.py             # 23 tests for the FastAPI REST layer
 
 examples/
-└── scenarios.py    # All four case-study scenarios runnable end-to-end
+├── quick_start.py           # Minimal end-to-end example from the Quick Start section
+├── example_scenarios.py     # All four case-study scenarios runnable end-to-end
+├── diff_demo.py             # Demonstrates diff() across multiple fields
+├── presentation_demo.py     # Shows output of all presentation functions
+└── export_history_json.py   # Exports a full trade history to trade_history.json
 
 api/
 └── main.py         # FastAPI REST interface (wraps TradeStore as HTTP endpoints)
@@ -113,7 +119,8 @@ The single entry-point.  All methods return the `Trade` object.
 | `patch` | `(trade_id, user_id, **fields) → Trade` | Same as `update` but only the specified fields change. e.g. `patch(id, user, notional_amount=1_200_000)`. |
 | `send_to_execute` | `(trade_id, user_id) → Trade` | Approved → SentToCounterparty. Approver only. |
 | `book` | `(trade_id, user_id, strike) → Trade` | SentToCounterparty → Executed. Requester or approver. Records the strike rate. |
-| `get_history` | `(trade_id) → list[HistoryEntry]` | Full ordered action history. |
+| `get_history` | `(trade_id) → list[HistoryEntry]` | Full ordered action history for a single trade. |
+| `get_all_history` | `() → dict[str, list[HistoryEntry]]` | Action history for all trades, keyed by trade ID. |
 | `get_details_at_version` | `(trade_id, version) → TradeDetails` | Snapshot after the *n*-th action (1-indexed). |
 | `diff` | `(trade_id, v1, v2) → dict` | Fields that changed between two versions: `{field: (old, new)}`. |
 | `list_trades` | `(state=None) → list[Trade]` | All trades, optionally filtered by state. |
@@ -177,7 +184,7 @@ class HistoryEntry(BaseModel):
     notes: str
 ```
 
-Use `history_entry_to_dict(entry)` from `trade_approval.presentation` to serialise to a plain dict for JSON export.
+Use `history_entry_to_dict(entry)` from `trade_approval.presentation` to serialise to a plain dict for JSON export. The serialisation functions produce JSON-compatible dicts; persisting them to files or sending them over HTTP (as the FastAPI `/history` endpoint does) is left to the caller. See `examples/export_history_json.py` for a complete file export example.
 
 ### Exceptions
 
@@ -261,23 +268,44 @@ diff = store.diff(trade.trade_id, 1, 2)   # changes made by Update
 Run all scenarios:
 
 ```bash
-.venv/bin/python examples/scenarios.py
+.venv/bin/python examples/example_scenarios.py
 ```
 
 ---
 
 ## Running Tests
 
+Run all tests (core library + FastAPI layer):
+
 ```bash
 .venv/bin/python -m pytest tests/ -v
 ```
 
-52 tests covering:
+Run only the core library tests:
+
+```bash
+.venv/bin/python -m pytest tests/test_trade_approval.py -v
+```
+
+Run only the FastAPI tests:
+
+```bash
+.venv/bin/python -m pytest tests/test_api.py -v
+```
+
+> **Note on a harmless warning:** when running the FastAPI tests you may see
+> `StarletteDeprecationWarning: Using httpx with starlette.testclient is deprecated; install httpx2 instead.`
+> This warning originates inside FastAPI/Starlette's own `TestClient` implementation, not in our code.
+> Switching to `httpx2` on our side would not silence it — the warning is issued by FastAPI/Starlette's own internals,
+> which have not yet been updated to use `httpx2`. All 23 tests pass correctly; the warning can be safely ignored.
+
+87 tests covering:
 - All four case-study scenarios end-to-end
 - Full validation rule coverage
 - Every invalid state transition
 - All authorization edge cases
 - History snapshot isolation (mutations don't corrupt past versions)
+- All FastAPI endpoints (status codes, workflow actions, error responses, history and diff)
 
 ---
 
@@ -300,12 +328,40 @@ Available endpoints:
 | `GET` | `/trades/{id}` | Get a single trade |
 | `POST` | `/trades/{id}/submit` | Draft → PendingApproval |
 | `POST` | `/trades/{id}/approve` | → Approved |
-| `POST` | `/trades/{id}/update` | → NeedsReapproval |
+| `POST` | `/trades/{id}/update` | → NeedsReapproval (requires full `TradeDetails`) |
+| `POST` | `/trades/{id}/patch` | → NeedsReapproval (only supply changed fields) |
 | `POST` | `/trades/{id}/cancel` | → Cancelled |
 | `POST` | `/trades/{id}/send-to-execute` | → SentToCounterparty |
 | `POST` | `/trades/{id}/book` | → Executed (records strike rate) |
-| `GET` | `/trades/{id}/history` | Full action history |
+| `GET` | `/trades/{id}/history` | Full action history for a single trade |
+| `GET` | `/history` | Action history for all trades, keyed by trade ID |
 | `GET` | `/trades/{id}/diff?v1=1&v2=2` | Field-level diff between two versions |
+
+---
+
+## Extensions Beyond the Original Requirements
+
+The following were not specified in the case study but were added to demonstrate broader engineering thinking:
+
+**FastAPI REST layer** (`api/main.py`) — exposes the full workflow as HTTP endpoints with automatic Swagger UI at `/docs`. No frontend code required; the interactive API explorer is generated from the Pydantic models.
+
+**Pydantic integration** — `TradeDetails` and `HistoryEntry` are frozen Pydantic `BaseModel` subclasses. Validation runs automatically at construction time, serialisation to JSON-safe dicts is a single `model_dump()` call, and the models integrate natively with FastAPI.
+
+**`patch()` method** — convenience wrapper on `update()` that accepts only the fields that change, using `model_validate` internally to ensure validation still runs on the merged result.
+
+**`diff()` across arbitrary versions** — compares snapshots at any two history steps, not just consecutive ones. Returns only the fields that changed as `{field: (before, after)}`.
+
+**JSON export** (`examples/export_history_json.py`) — demonstrates the full serialisation pipeline end-to-end, writing a trade's complete history to `trade_history.json`.
+
+**Layered architecture** — explicit separation of domain (`models.py`, `trade.py`), infrastructure (`store.py`), and presentation (`presentation.py`) layers with one-way dependencies. Serialisation and formatting are fully isolated from business logic.
+
+**Immutable history snapshots** — each `HistoryEntry` stores a deep copy of `TradeDetails` at the moment of the action, so past versions are never corrupted by subsequent updates.
+
+**Human-readable audit trail** — `format_history_table()` renders the full action history as a formatted table with columns for step, action, user, state transitions, timestamp, and notes.
+
+**Cross-trade history** — `get_all_history()` on `TradeStore` (and `GET /history` on the REST API) returns the action history for every trade at once, keyed by trade ID — useful for audit and reporting use cases.
+
+**87 tests** — 64 unit tests covering the core library (all four case-study scenarios, every validation rule, every invalid state transition, all authorisation edge cases, snapshot isolation, `patch()`, `diff()`, and the presentation layer) plus 23 integration tests for the FastAPI REST layer.
 
 ---
 
@@ -333,7 +389,15 @@ Where the specification was silent or ambiguous, the following decisions were ma
 
 **Pydantic models.** `TradeDetails` and `HistoryEntry` are frozen Pydantic `BaseModel` subclasses. All field-level and cross-field validation runs automatically at construction time, so by the time a `TradeDetails` reaches the store or trade, it is guaranteed valid. `model_dump(mode="json")` in `presentation.py` gives JSON-safe serialisation with zero boilerplate.
 
-**Layered architecture.** The code is split into three distinct layers with one-way dependencies: domain (`models.py`, `trade.py`) → infrastructure (`store.py`) → presentation (`presentation.py`). Domain objects have no knowledge of how they are stored or displayed. Serialisation (`trade_details_to_dict`, `history_entry_to_dict`) and formatting (`format_history_table`) live exclusively in `presentation.py`.
+**Layered architecture.** The code is deliberately split into three layers with strict one-way dependencies:
+
+| Layer | Files | Responsibility |
+|---|---|---|
+| **Data** | `models.py` | Defines what a trade *is* — data shapes and validation rules. Pure data structures with no behaviour beyond ensuring values are valid. |
+| **Business logic** | `trade.py`, `store.py`, `exceptions.py` | Defines what you can *do* with trades — state machine rules, authorisation, history recording. No knowledge of how data is displayed or serialised. |
+| **Presentation** | `presentation.py`, `api/main.py` | Defines how trades are *shown or communicated* to the outside world — human-readable tables, JSON-safe dicts, HTTP endpoints. |
+
+The dependency flows in one direction only: `models.py` ← `trade.py / store.py` ← `presentation.py / api/main.py`. Each layer knows only about the layers to its left. If `presentation.py` were deleted entirely, the business logic would continue to work unchanged.
 
 **Storage abstraction.** `TradeStore` wraps an in-memory dict. Replacing it with a database adapter would only require changes inside `store.py`; the `Trade` state-machine logic is unaffected.
 
