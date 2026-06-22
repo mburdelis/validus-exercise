@@ -175,6 +175,47 @@ class TestScenario4HistoryAndDiff:
         assert "User1" in table
         assert "User2" in table
 
+    def test_format_history_table_has_header_row(self, store, approved_trade):
+        table = format_history_table(store.get_trade(approved_trade.trade_id))
+        lines = table.splitlines()
+        assert "Step" in lines[0]
+        assert "Action" in lines[0]
+        assert "User" in lines[0]
+        assert "State Before" in lines[0]
+        assert "State After" in lines[0]
+        assert "Timestamp" in lines[0]
+        assert "Notes" in lines[0]
+
+    def test_format_history_table_has_separator_row(self, store, approved_trade):
+        table = format_history_table(store.get_trade(approved_trade.trade_id))
+        lines = table.splitlines()
+        assert set(lines[1]) == {"-"}
+
+    def test_format_history_table_has_correct_row_count(self, store, approved_trade):
+        table = format_history_table(store.get_trade(approved_trade.trade_id))
+        lines = table.splitlines()
+        # header + separator + one row per history entry (2: submit + approve)
+        assert len(lines) == 4
+
+    def test_history_entry_to_dict_returns_expected_keys(self, store, approved_trade):
+        from trade_approval import history_entry_to_dict
+        entry = store.get_history(approved_trade.trade_id)[0]
+        d = history_entry_to_dict(entry)
+        assert set(d.keys()) == {"step", "action", "user_id", "state_before", "state_after", "timestamp", "notes"}
+
+    def test_history_entry_to_dict_excludes_snapshot(self, store, approved_trade):
+        from trade_approval import history_entry_to_dict
+        entry = store.get_history(approved_trade.trade_id)[0]
+        d = history_entry_to_dict(entry)
+        assert "trade_details_snapshot" not in d
+
+    def test_history_entry_to_dict_values_are_json_compatible(self, store, approved_trade):
+        import json
+        from trade_approval import history_entry_to_dict
+        entry = store.get_history(approved_trade.trade_id)[0]
+        d = history_entry_to_dict(entry)
+        json.dumps(d)  # raises if any value is not JSON-serialisable
+
 
 # ---------------------------------------------------------------------------
 # Validation
@@ -380,3 +421,39 @@ class TestStoreUtilities:
         )
         v1_after = store.get_details_at_version(submitted_trade.trade_id, 1)
         assert v1_before.notional_amount == v1_after.notional_amount == 1_000_000.0
+
+
+# ---------------------------------------------------------------------------
+# Patch (partial update)
+# ---------------------------------------------------------------------------
+
+class TestPatch:
+    def test_patch_changes_specified_field(self, store, submitted_trade):
+        store.patch(submitted_trade.trade_id, "User2", notional_amount=1_200_000.0)
+        assert submitted_trade.current_details.notional_amount == 1_200_000.0
+
+    def test_patch_preserves_unchanged_fields(self, store, submitted_trade):
+        store.patch(submitted_trade.trade_id, "User2", notional_amount=1_200_000.0)
+        assert submitted_trade.current_details.trading_entity == "Acme Corp"
+        assert submitted_trade.current_details.underlying == "EURUSD"
+
+    def test_patch_triggers_needs_reapproval(self, store, submitted_trade):
+        store.patch(submitted_trade.trade_id, "User2", notional_amount=1_200_000.0)
+        assert submitted_trade.state == TradeState.NEEDS_REAPPROVAL
+
+    def test_patch_multiple_fields(self, store, submitted_trade):
+        store.patch(
+            submitted_trade.trade_id, "User2",
+            notional_amount=2_000_000.0,
+            counterparty="Bank ABC",
+        )
+        assert submitted_trade.current_details.notional_amount == 2_000_000.0
+        assert submitted_trade.current_details.counterparty == "Bank ABC"
+
+    def test_patch_invalid_value_raises(self, store, submitted_trade):
+        with pytest.raises(ValidationError):
+            store.patch(submitted_trade.trade_id, "User2", notional_amount=-1.0)
+
+    def test_patch_requester_cannot_patch_own_trade(self, store, submitted_trade):
+        with pytest.raises(UnauthorizedActionError):
+            store.patch(submitted_trade.trade_id, "User1", notional_amount=1_200_000.0)

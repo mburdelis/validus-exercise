@@ -67,6 +67,24 @@ class TradeStore:
         trade.update(user_id, new_details)
         return trade
 
+    def patch(self, trade_id: str, user_id: str, **fields: Any) -> Trade:
+        """Update only specific fields, keeping everything else unchanged.
+
+        Convenience wrapper around ``update`` — internally calls
+        ``model_copy(update=fields)`` on the current details so callers don't
+        need to reconstruct the full ``TradeDetails`` object.
+
+        Example::
+
+            store.patch(trade_id, "User2", notional_amount=1_200_000)
+        """
+        trade = self.get_trade(trade_id)
+        new_details = TradeDetails.model_validate(
+            {**trade.current_details.model_dump(), **fields}
+        )
+        trade.update(user_id, new_details)
+        return trade
+
     def send_to_execute(self, trade_id: str, user_id: str) -> Trade:
         """Send an approved trade to the counterparty (Approved → SentToCounterparty)."""
         trade = self.get_trade(trade_id)

@@ -109,7 +109,8 @@ The single entry-point.  All methods return the `Trade` object.
 | `submit` | `(trade_id, user_id) → Trade` | Draft → PendingApproval. Only the requester. |
 | `approve` | `(trade_id, user_id) → Trade` | PendingApproval → Approved (any non-requester). NeedsReapproval → Approved (requester only). |
 | `cancel` | `(trade_id, user_id) → Trade` | → Cancelled. Requester or approver. |
-| `update` | `(trade_id, user_id, new_details) → Trade` | PendingApproval → NeedsReapproval. Approver only. |
+| `update` | `(trade_id, user_id, new_details) → Trade` | PendingApproval → NeedsReapproval. Approver only. Requires full `TradeDetails`. |
+| `patch` | `(trade_id, user_id, **fields) → Trade` | Same as `update` but only the specified fields change. e.g. `patch(id, user, notional_amount=1_200_000)`. |
 | `send_to_execute` | `(trade_id, user_id) → Trade` | Approved → SentToCounterparty. Approver only. |
 | `book` | `(trade_id, user_id, strike) → Trade` | SentToCounterparty → Executed. Requester or approver. Records the strike rate. |
 | `get_history` | `(trade_id) → list[HistoryEntry]` | Full ordered action history. |
@@ -344,7 +345,8 @@ Where the specification was silent or ambiguous, the following decisions were ma
 
 This implementation was developed with the assistance of Claude Code (Anthropic). My specific contributions included:
 - Designing the overall architecture (state machine dict, snapshot strategy, two-principal authorization model).
+- Designing the README documentation, including the workflow diagram, API reference, and Assumptions & Design Decisions section, through iterative collaboration with the AI under human review and direction.
 - Specifying the validation rules for the `underlying` field (parse as two 3-char ISO 4217 codes, verify notional currency is one of them, accept `"EUR/USD"` separator notation).
 - Choosing the lazy-approver approach (approver_id set on first approver action rather than requiring pre-registration).
-- Authoring the test scenarios and edge cases, including the snapshot-isolation test.
+- Authoring the test scenarios and edge cases, including the snapshot-isolation test (human interaction was crucial to ensure proper tests coverage).
 - Reviewing and correcting generated code throughout.

@@ -133,7 +133,7 @@ class Trade:
                 )
             self.approver_id = user_id
             notes = "Approver confirms trade."
-        else:  # NEEDS_REAPPROVAL
+        else:  # guaranteed NEEDS_REAPPROVAL — _transition() already rejected any other state
             if not self._is_requester(user_id):
                 raise UnauthorizedActionError(
                     f"Only the original requester ('{self.requester_id}') may "
