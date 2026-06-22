@@ -6,11 +6,14 @@ A Python library implementing the trade approval workflow described in the Valid
 
 - Python 3.11+
 - [pydantic](https://docs.pydantic.dev/) ≥ 2.0
+- [fastapi](https://fastapi.tiangolo.com/) ≥ 0.100 + uvicorn (for the REST API)
 - pytest (for tests only)
 
+Install all dependencies into the project virtual environment:
+
 ```bash
-pip install pydantic
-pip install pytest   # only needed to run the test suite
+uv venv                                                    # create .venv
+uv pip install --python .venv/bin/python pydantic fastapi uvicorn pytest
 ```
 
 ---
@@ -30,6 +33,9 @@ tests/
 
 examples/
 └── scenarios.py    # All four case-study scenarios runnable end-to-end
+
+api/
+└── main.py         # FastAPI REST interface (wraps TradeStore as HTTP endpoints)
 ```
 
 ---
@@ -245,7 +251,7 @@ diff = store.diff(trade.trade_id, 1, 2)   # changes made by Update
 Run all scenarios:
 
 ```bash
-python examples/scenarios.py
+.venv/bin/python examples/scenarios.py
 ```
 
 ---
@@ -253,7 +259,7 @@ python examples/scenarios.py
 ## Running Tests
 
 ```bash
-python -m pytest tests/ -v
+.venv/bin/python -m pytest tests/ -v
 ```
 
 52 tests covering:
@@ -262,6 +268,34 @@ python -m pytest tests/ -v
 - Every invalid state transition
 - All authorization edge cases
 - History snapshot isolation (mutations don't corrupt past versions)
+
+---
+
+## Running the REST API
+
+Start the server:
+
+```bash
+.venv/bin/uvicorn api.main:app --reload
+```
+
+Then open **http://127.0.0.1:8000/docs** in your browser for the interactive Swagger UI — every endpoint is listed there with request/response schemas and an "Execute" button to call it directly. No frontend required.
+
+Available endpoints:
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/trades` | Create a trade in Draft state |
+| `GET` | `/trades` | List all trades (optional `?state=Draft`) |
+| `GET` | `/trades/{id}` | Get a single trade |
+| `POST` | `/trades/{id}/submit` | Draft → PendingApproval |
+| `POST` | `/trades/{id}/approve` | → Approved |
+| `POST` | `/trades/{id}/update` | → NeedsReapproval |
+| `POST` | `/trades/{id}/cancel` | → Cancelled |
+| `POST` | `/trades/{id}/send-to-execute` | → SentToCounterparty |
+| `POST` | `/trades/{id}/book` | → Executed (records strike rate) |
+| `GET` | `/trades/{id}/history` | Full action history |
+| `GET` | `/trades/{id}/diff?v1=1&v2=2` | Field-level diff between two versions |
 
 ---
 
