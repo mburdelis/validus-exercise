@@ -319,6 +319,8 @@ Start the server:
 
 Then open **http://127.0.0.1:8000/docs** in your browser for the interactive Swagger UI — every endpoint is listed there with request/response schemas and an "Execute" button to call it directly. No frontend required.
 
+> **Tips for manual testing:** All request bodies are pre-filled with valid example values. You will need to copy the `trade_id` from the response of `POST /trades` and paste it into subsequent requests. For endpoints that require a different user (e.g. `approve` from `PendingApproval` and `send-to-execute` require a user other than the requester), the example defaults to `"User2"` — adjust as needed if your requester was not `"User1"`. Note that if the trade is in `NeedsReapproval` state, it is the original requester (`"User1"`) who must approve.
+
 Available endpoints:
 
 | Method | Path | Description |
