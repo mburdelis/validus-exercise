@@ -10,9 +10,5 @@ class UnauthorizedActionError(TradeWorkflowError):
     """Raised when a user is not authorized to perform an action."""
 
 
-class TradeValidationError(TradeWorkflowError):
-    """Raised when trade details fail validation."""
-
-
 class TradeNotFoundError(TradeWorkflowError):
     """Raised when a trade cannot be found by its ID."""

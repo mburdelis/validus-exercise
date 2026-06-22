@@ -6,7 +6,7 @@ A Python library implementing the trade approval workflow described in the Valid
 
 - Python 3.11+
 - [pydantic](https://docs.pydantic.dev/) ≥ 2.0
-- [fastapi](https://fastapi.tiangolo.com/) ≥ 0.100 + uvicorn (for the REST API)
+- [fastapi](https://fastapi.tiangolo.com/) ≥ 0.100 + uvicorn (optional: for the REST API)
 - pytest (for tests only)
 
 Set up the virtual environment and install all dependencies:
@@ -45,16 +45,23 @@ api/
 ## Workflow Overview
 
 ```
-Draft ──[Submit]──► PendingApproval ──[Approve]──────────────────► Approved
-                           │                                            │
-                        [Update]                                  [SendToExecute]
-                           │                                            │
-                     NeedsReapproval ──[Approve]──► Approved   SentToCounterparty
-                           │                                            │
-                        [Cancel]                                    [Book]
-                           │                                            │
-                       Cancelled ◄──[Cancel]──────────────────►  Executed
+Draft ──[Submit]──► PendingApproval ──[Approve]──► Approved
+                           │                       ▲      │
+                        [Update]               [Approve]  ▼
+                           │                       │  [SendToExecute]
+                     NeedsReapproval ──────────────┘          │
+                                                              ▼
+                                                      SentToCounterparty
+                                                              │
+                                                              ▼
+                                                           [Book]
+                                                              │
+                                                              ▼
+                                                          Executed
 ```
+
+[Cancel] → Cancelled is available from any non-terminal state (except `Draft`):
+`PendingApproval`, `NeedsReapproval`, `Approved`, `SentToCounterparty`.
 
 **States:** `Draft`, `PendingApproval`, `NeedsReapproval`, `Approved`,
 `SentToCounterparty`, `Executed` (end), `Cancelled` (end).
@@ -173,13 +180,13 @@ Use `history_entry_to_dict(entry)` from `trade_approval.presentation` to seriali
 
 ### Exceptions
 
-| Exception | When raised |
-|---|---|
-| `pydantic.ValidationError` | `TradeDetails` constructed with invalid data. |
-| `InvalidStateTransitionError` | Action not permitted in the current state. |
-| `UnauthorizedActionError` | User not authorised to perform the action. |
-| `TradeNotFoundError` | `trade_id` not found in the store. |
-| `TradeWorkflowError` | Base class for all workflow exceptions. |
+| Exception | When raised | Example |
+|---|---|---|
+| `pydantic.ValidationError` | `TradeDetails` constructed with invalid data. | Blank `trading_entity`, invalid currency code, `notional_amount ≤ 0`. |
+| `InvalidStateTransitionError` | Action not permitted in the current state. | Approving a trade that is already Cancelled. |
+| `UnauthorizedActionError` | User not authorised to perform the action. | The requester trying to approve their own trade. |
+| `TradeNotFoundError` | `trade_id` not found in the store. | Calling `store.get_trade("bad-id")`. |
+| `TradeWorkflowError` | Base class — catches all of the above. | `except TradeWorkflowError` to handle any workflow error in one place. |
 
 ---
 
@@ -298,6 +305,20 @@ Available endpoints:
 | `POST` | `/trades/{id}/book` | → Executed (records strike rate) |
 | `GET` | `/trades/{id}/history` | Full action history |
 | `GET` | `/trades/{id}/diff?v1=1&v2=2` | Field-level diff between two versions |
+
+---
+
+## Assumptions & Design Decisions
+
+Where the specification was silent or ambiguous, the following decisions were made:
+
+**`Update` is allowed from `PendingApproval`.** The state/action table in the case study does not explicitly list `Update` as a valid action from `PendingApproval`. However, Scenario 2 in the PDF clearly demonstrates an `Update` being performed on a trade in `PendingApproval` state, implying the transition `PendingApproval → NeedsReapproval` must exist. We treat the scenario as the authoritative source and include this transition in the state machine.
+
+**Lazy approver assignment.** The spec does not specify when the approver is determined. We set `approver_id` lazily — it is assigned to whoever first performs an approver action (`Approve` or `Update`). Before that point, any non-requester may act in the approver role. This avoids requiring an approver to be pre-registered before a trade can be submitted.
+
+**`Draft` cannot be cancelled.** According to the table under the "State Transitions" section in the problem statement, the only allowed action from the `Draft` state is `Submit`. A trade in `Draft` has not yet entered the workflow, so there is nothing to cancel. Cancel is therefore only available from `PendingApproval`, `NeedsReapproval`, `Approved`, and `SentToCounterparty`.
+
+**`strike` is set at `Book` time, not before.** The strike rate (agreed exchange rate) is only known once the counterparty confirms execution. It is recorded on the `TradeDetails` snapshot at the `Book` step and is `None` in all earlier history entries.
 
 ---
 

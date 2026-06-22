@@ -14,7 +14,6 @@ Public API surface:
         TradeWorkflowError,
         InvalidStateTransitionError,
         UnauthorizedActionError,
-        TradeValidationError,
         TradeNotFoundError,
     )
 """
@@ -22,7 +21,6 @@ Public API surface:
 from .exceptions import (
     InvalidStateTransitionError,
     TradeNotFoundError,
-    TradeValidationError,
     TradeWorkflowError,
     UnauthorizedActionError,
 )
@@ -53,6 +51,5 @@ __all__ = [
     "TradeWorkflowError",
     "InvalidStateTransitionError",
     "UnauthorizedActionError",
-    "TradeValidationError",
     "TradeNotFoundError",
 ]
