@@ -9,12 +9,14 @@ A Python library implementing the trade approval workflow described in the Valid
 - [fastapi](https://fastapi.tiangolo.com/) ≥ 0.100 + uvicorn (for the REST API)
 - pytest (for tests only)
 
-Install all dependencies into the project virtual environment:
+Set up the virtual environment and install all dependencies:
 
 ```bash
-uv venv                                                    # create .venv
-uv pip install --python .venv/bin/python pydantic fastapi uvicorn pytest
+uv venv                                                # create .venv
+uv pip install --python .venv/bin/python -e ".[dev,api]"  # install everything
 ```
+
+The `-e .` installs the `trade_approval` package itself in editable mode (so it is importable from any script). `[dev,api]` pulls in the optional extras: `pytest`, `fastapi`, and `uvicorn`.
 
 ---
 
